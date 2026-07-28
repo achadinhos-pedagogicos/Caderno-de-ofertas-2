@@ -5,6 +5,22 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Caderno de Ofertas</title>
 <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+  .input {
+    width: 100%;
+    border: 1px solid rgba(6, 78, 59, 0.2);
+    background: white;
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    outline: none;
+  }
+
+  .input:focus {
+    border-color: rgb(6, 78, 59);
+    box-shadow: 0 0 0 2px rgba(6, 78, 59, 0.15);
+  }
+  </style>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -512,3 +528,230 @@ function ProductFormModal({ product, categories, onClose, onSave, onDelete }) {
               <input type="number" step="0.1" value={form.commissionPercent} onChange={(e) => update("commissionPercent", e.target.value)} className="input" />
             </Field>
   </div>
+          <label className="flex items-center gap-2 text-sm text-stone-700">
+            <input
+              type="checkbox"
+              checked={form.isBestseller}
+              onChange={(e) => update("isBestseller", e.target.checked)}
+            />
+            Produto mais vendido ⭐
+          </label>
+
+          <div className="flex gap-2 pt-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 rounded-lg border border-stone-300 py-2 text-stone-700"
+            >
+              Cancelar
+            </button>
+
+            <button
+              type="submit"
+              className="flex-1 rounded-lg bg-emerald-700 text-white py-2 font-semibold"
+            >
+              {isEditing ? "Salvar alterações" : "Adicionar produto"}
+            </button>
+          </div>
+
+          {isEditing && (
+            <button
+              type="button"
+              onClick={() => {
+                if (confirm("Excluir este produto?")) {
+                  onDelete(product.id);
+                }
+              }}
+              className="mt-2 rounded-lg bg-red-600 text-white py-2 font-semibold"
+            >
+              Excluir produto
+            </button>
+          )}
+        </form>
+      </div>
+    </div>
+  );
+}
+  function Field({ label, children }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="text-xs font-semibold text-stone-600">
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+  }
+  function App() {
+  const [categories] = useState(() =>
+    loadKey("categories", SEED_CATEGORIES)
+  );
+
+  const [products, setProducts] = useState(() =>
+    loadKey("products", SEED_PRODUCTS)
+  );
+
+  const [favorites, setFavorites] = useState(() =>
+    loadKey("favorites", [])
+  );
+
+  const [productModal, setProductModal] = useState(null);
+  const [messageProduct, setMessageProduct] = useState(null);
+
+  const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+
+  useEffect(() => {
+    saveKey("products", products);
+  }, [products]);
+
+  useEffect(() => {
+    saveKey("favorites", favorites);
+  }, [favorites]);
+
+  function toggleFavorite(id) {
+    setFavorites((old) =>
+      old.includes(id)
+        ? old.filter((item) => item !== id)
+        : [...old, id]
+    );
+  }
+
+  function saveProduct(product) {
+    setProducts((old) => {
+      const exists = old.some((p) => p.id === product.id);
+
+      if (exists) {
+        return old.map((p) =>
+          p.id === product.id ? product : p
+        );
+      }
+
+      return [product, ...old];
+    });
+
+    setProductModal(null);
+  }
+
+  function deleteProduct(id) {
+    setProducts((old) => old.filter((p) => p.id !== id));
+    setProductModal(null);
+  }
+
+  function logShare(data) {
+    const history = loadKey("shareHistory", []);
+    saveKey("shareHistory", [
+      {
+        ...data,
+        date: Date.now()
+      },
+      ...history
+    ]);
+  }
+
+  const filteredProducts = products.filter((product) => {
+    const matchSearch =
+      product.name
+        .toLowerCase()
+        .includes(search.toLowerCase());
+
+    const matchCategory =
+      categoryFilter === "all" ||
+      product.categoryId === categoryFilter;
+
+    return matchSearch && matchCategory;
+  });
+
+  return (
+    <div className="min-h-screen bg-stone-100">
+      <header className="bg-emerald-900 text-white p-4 shadow">
+        <h1 className="text-xl font-serif font-bold">
+          📒 Caderno de Ofertas
+        </h1>
+        <p className="text-sm opacity-80">
+          Achadinhos para educação, organização e tecnologia
+        </p>
+      </header>
+
+      <main className="p-4 max-w-6xl mx-auto">
+        <div className="flex flex-col gap-3 mb-5">
+          <button
+            onClick={() => setProductModal({})}
+            className="bg-amber-400 text-emerald-900 font-bold rounded-lg py-3"
+          >
+            ➕ Adicionar produto
+          </button>
+
+          <input
+            className="input"
+            placeholder="🔎 Buscar produto..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+
+          <select
+            className="input"
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+          >
+            <option value="all">Todas as categorias</option>
+            {categories.map((cat) => (
+              <option key={cat.id} value={cat.id}>
+                {cat.emoji} {cat.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredProducts.map((product) => {
+            const category = categories.find(
+              (c) => c.id === product.categoryId
+            );
+
+            return (
+              <ProductCard
+                key={product.id}
+                product={product}
+                category={category}
+                isFavorite={favorites.includes(product.id)}
+                onToggleFavorite={toggleFavorite}
+                onOpenMessage={setMessageProduct}
+              />
+            );
+          })}
+        </div>
+      </main>
+
+      {productModal && (
+        <ProductFormModal
+          product={
+            productModal.id
+              ? productModal
+              : null
+          }
+          categories={categories}
+          onClose={() => setProductModal(null)}
+          onSave={saveProduct}
+          onDelete={deleteProduct}
+        />
+      )}
+
+      {messageProduct && (
+        <MessageModal
+          product={messageProduct}
+          category={categories.find(
+            (c) =>
+              c.id === messageProduct.categoryId
+          )}
+          onClose={() => setMessageProduct(null)}
+          onLogShare={logShare}
+        />
+      )}
+    </div>
+  );
+    }
+  id="83591"
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<App />);
+  
