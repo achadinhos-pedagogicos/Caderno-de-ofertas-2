@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Caderno de Ofertas</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<link rel="icon" href="data:,">
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useCallback } = React;
+
+const SEED_CATEGORIES = [
+  { id: "cat-livros", name: "Livros", emoji: "📚" },
+  { id: "cat-papelaria", name: "Papelaria", emoji: "✏️" },
+  { id: "cat-jogos", name: "Jogos pedagógicos", emoji: "🧩" },
+  { id: "cat-tech", name: "Notebooks e impressoras", emoji: "💻" },
+  { id: "cat-organizacao", name: "Organização e planners", emoji: "🗂️" }
+];
+
+const SEED_PRODUCTS = [
+  {
+    id: "prod-1",
+    name: "(Exemplo) Kit 12 canetas hidrográficas coloridas",
+    categoryId: "cat-papelaria",
+    store: "Shopee",
+    imageUrl: "https://images.unsplash.com/photo-1513542789411-b6a5d4f31634?w=600",
+    price: 24.9,
+    originalPrice: 39.9,
+    rating: 4.8,
+    commissionPercent: 12,
+    affiliateLink: "https://shopee.com.br",
+    isBestseller: true,
+    createdAt: Date.now() - 3000
+  }
+];
+
+const AUDIENCE_OPTIONS = [
+  { value: "geral", label: "Geral" },
+  { value: "professor", label: "Professores" },
+  { value: "estudante", label: "Estudantes de Pedagogia" },
+  { value: "pai", label: "Pais" }
+];
+
+const AUDIENCE_PHRASE = {
+  geral: "pra você",
+  professor: "pra sua sala de aula",
+  estudante: "pra sua faculdade de Pedagogia",
+  pai: "pra ajudar seu filho a aprender em casa"
+};
+
+const LENGTH_OPTIONS = [
+  { value: "curta", label: "Curta" },
+  { value: "media", label: "Média" },
+  { value: "longa", label: "Longa" }
+];
+
+function uid(prefix) {
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function formatPrice(value) {
+  const n = Number(value) || 0;
+  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function discountPercent(product) {
+  if (!product.originalPrice || product.originalPrice <= product.price) return 0;
+  return Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100);
+}
+
+function slugTag(text) {
+  return (text || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+function buildHashtags(product, category, audience) {
+  const tags = new Set(["#achadinhos", "#educacaoinfantil"]);
+  if (category) tags.add(`#${slugTag(category.name)}`);
+  if (product.store) tags.add(`#${slugTag(product.store)}`);
+  if (audience === "professor") tags.add("#professores");
+  if (audience === "estudante") tags.add("#pedagogia");
+  if (audience === "pai") tags.add("#maternidade");
+  if (discountPercent(product) >= 20) tags.add("#promocao");
+  return Array.from(tags).slice(0, 6);
+}
+
+function templateMessage(product, category, audience, length, link) {
+  const emoji = (category && category.emoji) || "🛍️";
+  const discount = discountPercent(product);
+  const phrase = AUDIENCE_PHRASE[audience] || AUDIENCE_PHRASE.geral;
+  const priceText = formatPrice(product.price);
+  const wasText =
+    product.originalPrice && product.originalPrice > product.price
+      ? ` (de ${formatPrice(product.originalPrice)})`
+      : "";
+
+  if (length === "curta") {
+    return (
+      `${emoji} ${product.name}\n` +
+      `${discount > 0 ? `${discount}% OFF · ` : ""}${priceText}${wasText}\n` +
+      `Corre que é rapidinho 👉 ${link}`
+    );
+  }
+  if (length === "media") {
+    return (
+      `${emoji} Separei esse achadinho ${phrase}!\n\n` +
+      `${product.name}\n` +
+      `${discount > 0 ? `💸 ${discount}% de desconto — ` : ""}${priceText}${wasText}\n` +
+      `${product.rating ? `⭐ ${Number(product.rating).toFixed(1)} de avaliação\n` : ""}` +
+      `\nVale muito a pena garantir o seu! 👉 ${link}`
+    );
+  }
+  return (
+    `${emoji} Oi! Passando pra deixar essa dica ${phrase}.\n\n` +
+    `📌 ${product.name}\n` +
+    `${discount > 0 ? `💸 ${discount}% OFF — de ${formatPrice(product.originalPrice)} por ` : "💰 "}${priceText}\n` +
+    `${product.rating ? `⭐ Avaliação: ${Number(product.rating).toFixed(1)}/5\n` : ""}` +
+    `🏪 Loja: ${product.store}\n\n` +
+    `Esse tipo de material faz toda diferença no dia a dia — seja pra organizar o planejamento, ` +
+    `deixar a aula mais divertida ou economizar tempo. Já separei o link pra facilitar:\n\n` +
+    `👉 ${link}\n\n` +
+    `Aproveita enquanto o preço tá assim! 🙌`
+  );
+}
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (e) {
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      return true;
+    } catch (e2) {
+      return false;
+    }
+  }
+}
+
+async function downloadImage(url, filename) {
+  try {
+    const res = await fetch(url);
+    const blob = await res.blob();
+    const objUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = objUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(objUrl);
+  } catch (e) {
+    window.open(url, "_blank");
+  }
+}
+
+function loadKey(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch (e) {
+    return fallback;
+  }
+}
+
+function saveKey(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (e) {
+    // se o navegador bloquear o localStorage, os dados continuam na tela mas não persistem
+  }
+}
+
+function PriceTag({ product }) {
+  const discount = discountPercent(product);
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <span className="inline-flex items-center bg-white border border-emerald-900/30 rounded px-3 py-1 -rotate-2 shadow-sm font-mono text-sm font-semibold text-emerald-900">
+        {formatPrice(product.price)}
+      </span>
+      {discount > 0 && (
+        <span className="text-xs text-stone-400 line-through font-mono">
+          {formatPrice(product.originalPrice)}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function ProductCard({ product, category, isFavorite, onToggleFavorite, onOpenMessage }) {
+  const discount = discountPercent(product);
+  const [imgError, setImgError] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  async function handleCopyLink() {
+    const ok = await copyText(product.affiliateLink);
+    if (ok) {
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 1600);
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-emerald-900/15 shadow-sm overflow-hidden flex flex-col">
+      <div className="relative aspect-[4/3] bg-stone-100">
+        {product.imageUrl && !imgError ? (
+          <img
+            src={product.imageUrl}
+            alt={product.name}
+            onError={() => setImgError(true)}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-4xl">
+            {(category && category.emoji) || "🛍️"}
+          </div>
+        )}
+
+        <div className="absolute top-2 left-2 flex flex-col gap-1.5">
+          {product.isBestseller && (
+            <span className="bg-amber-400 text-emerald-900 text-xs font-bold px-2 py-1 rounded-md shadow-sm">
+              🔥 Mais vendido
+            </span>
+          )}
+          {discount >= 20 && (
+            <span className="bg-red-600 text-white text-xs font-bold px-2 py-1 rounded-md shadow-sm">
+              -{discount}%
+            </span>
+          )}
+        </div>
+
+        <button
+          onClick={() => onToggleFavorite(product.id)}
+          aria-label={isFavorite ? "Remover dos favoritos" : "Adicionar aos favoritos"}
+          className="absolute top-2 right-2 w-8 h-8 rounded-full bg-white/90 flex items-center justify-center text-lg"
+        >
+          {isFavorite ? "❤️" : "🤍"}
+        </button>
+      </div>
+
+      <div className="p-3.5 flex flex-col gap-2 flex-1">
+        <p className="text-xs font-semibold text-emerald-900/70 uppercase tracking-wide">
+          {(category && category.emoji) || ""} {(category && category.name) || "Sem categoria"} · {product.store}
+        </p>
+        <h3 className="font-serif font-semibold text-stone-800 leading-snug line-clamp-2">
+          {product.name}
+        </h3>
+
+        <PriceTag product={product} />
+
+        <div className="flex items-center gap-3 text-xs text-stone-500">
+          {product.rating != null && <span>⭐ {Number(product.rating).toFixed(1)}</span>}
+          {product.commissionPercent != null && <span>💰 comissão {product.commissionPercent}%</span>}
+        </div>
+
+        <div className="border-t border-dashed border-sky-200 mt-1 pt-2 flex flex-col gap-1.5">
+          <button
+            onClick={() => onOpenMessage(product)}
+            className="w-full bg-emerald-900 hover:bg-emerald-800 text-stone-50 font-semibold text-sm rounded-lg py-2"
+          >
+            💬 Mensagem para WhatsApp
+          </button>
+          <div className="flex gap-1.5">
+            <button
+              onClick={handleCopyLink}
+              className="flex-1 bg-amber-400 hover:bg-amber-500 text-emerald-900 font-semibold text-xs rounded-lg py-2"
+            >
+              {linkCopied ? "Link copiado!" : "🔗 Copiar link"}
+            </button>
+            <button
+              onClick={() => downloadImage(product.imageUrl, `${slugTag(product.name)}.jpg`)}
+              className="flex-1 bg-white border border-emerald-900/25 text-emerald-900 font-semibold text-xs rounded-lg py-2"
+            >
+              ⬇️ Baixar imagem
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MessageModal({ product, category, onClose, onLogShare }) {
+  const [audience, setAudience] = useState("geral");
+  const [length, setLength] = useState("media");
+  const [message, setMessage] = useState("");
+  const [hashtags, setHashtags] = useState([]);
+  const [feedback, setFeedback] = useState("");
+
+  const link = product.affiliateLink;
+
+  const generate = useCallback(() => {
+    const text = templateMessage(product, category, audience, length, link);
+    setMessage(text);
+    setHashtags(buildHashtags(product, category, audience));
+    setFeedback("");
+  }, [product, category, audience, length, link]);
+
+  useEffect(() => {
+    generate();
+  }, [generate]);
+
+  async function handleCopyMessage() {
+    const full = hashtags.length ? `${message}\n\n${hashtags.join(" ")}` : message;
+    const ok = await copyText(full);
+    if (ok) {
+      setFeedback("Mensagem copiada! Já pode colar no WhatsApp.");
+      onLogShare({ productId: product.id, audience, length, snippet: message.slice(0, 160) });
+    } else {
+      setFeedback("Não consegui copiar automaticamente — selecione o texto manualmente.");
+    }
+  }
+
+  async function handleCopyLinkOnly() {
+    const ok = await copyText(link);
+    setFeedback(ok ? "Link copiado!" : "Não consegui copiar — selecione manualmente.");
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-stone-900/50 flex items-end sm:items-center justify-center">
+      <div className="bg-stone-50 w-full sm:max-w-lg sm:rounded-xl rounded-t-2xl max-h-[92vh] overflow-y-auto shadow-2xl">
+        <div className="sticky top-0 bg-emerald-900 text-stone-50 px-4 py-3 flex items-center justify-between sm:rounded-t-xl">
+          <h2 className="font-serif font-semibold text-base line-clamp-1">{product.name}</h2>
+          <button onClick={onClose} aria-label="Fechar" className="text-xl leading-none px-2">×</button>
+        </div>
+
+        <div className="p-4 flex flex-col gap-4">
+          <div>
+            <p className="text-xs font-semibold text-stone-500 mb-1.5">Tamanho da mensagem</p>
+            <div className="flex gap-1.5">
+              {LENGTH_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => setLength(opt.value)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border ${
+                    length === opt.value
+                      ? "bg-emerald-900 text-stone-50 border-emerald-900"
+                      : "bg-white border-emerald-900/20 text-stone-700"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-stone-500 mb-1.5 block">Público</label>
+            <select
+              value={audience}
+              onChange={(e) => setAudience(e.target.value)}
+              className="w-full rounded-lg border border-emerald-900/20 bg-white px-3 py-2 text-sm"
+            >
+              {AUDIENCE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-semibold text-stone-500">Mensagem (edite à vontade)</label>
+              <button onClick={generate} className="text-xs font-semibold text-emerald-900">🔄 Gerar de novo</button>
+            </div>
+            <textarea
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              rows={8}
+              className="w-full rounded-lg border border-emerald-900/20 bg-white px-3 py-2 text-sm resize-none"
+            />
+          </div>
+
+          {hashtags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {hashtags.map((tag) => (
+                <span key={tag} className="text-xs bg-emerald-900/10 text-emerald-900 font-semibold px-2 py-1 rounded-full">{tag}</span>
+              ))}
+            </div>
+          )}
+
+          {feedback && <p className="text-xs text-emerald-900 font-semibold">{feedback}</p>}
+
+          <div className="flex flex-col gap-2 pt-1">
+            <button
+              onClick={handleCopyMessage}
+              disabled={!message}
+              className="w-full bg-emerald-900 hover:bg-emerald-800 text-stone-50 font-semibold text-sm rounded-lg py-2.5 disabled:opacity-50"
+            >
+              📋 Copiar mensagem para WhatsApp
+            </button>
+            <button
+              onClick={handleCopyLinkOnly}
+              className="w-full bg-white border border-emerald-900/25 text-emerald-900 font-semibold text-sm rounded-lg py-2.5"
+            >
+              🔗 Copiar somente o link
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProductFormModal({ product, categories, onClose, onSave, onDelete }) {
+  const isEditing = Boolean(product);
+  const [form, setForm] = useState({
+    name: (product && product.name) || "",
+    categoryId: (product && product.categoryId) || (categories[0] && categories[0].id) || "",
+    store: (product && product.store) || "Shopee",
+    imageUrl: (product && product.imageUrl) || "",
+    price: (product && product.price != null) ? String(product.price) : "",
+    originalPrice: (product && product.originalPrice != null) ? String(product.originalPrice) : "",
+    rating: (product && product.rating != null) ? String(product.rating) : "",
+    commissionPercent: (product && product.commissionPercent != null) ? String(product.commissionPercent) : "",
+    affiliateLink: (product && product.affiliateLink) || "",
+    isBestseller: (product && product.isBestseller) || false
+  });
+
+  function update(key, value) {
+    setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  function handleSubmit(e) {
+    e.preventDefault();
+    if (!form.name || !form.categoryId || !form.affiliateLink) return;
+    onSave({
+      id: (product && product.id) || uid("prod"),
+      name: form.name,
+      categoryId: form.categoryId,
+      store: form.store,
+      imageUrl: form.imageUrl,
+      price: Number(form.price) || 0,
+      originalPrice: form.originalPrice ? Number(form.originalPrice) : null,
+      rating: form.rating ? Number(form.rating) : null,
+      commissionPercent: form.commissionPercent ? Number(form.commissionPercent) : null,
+      affiliateLink: form.affiliateLink,
+      isBestseller: form.isBestseller,
+      createdAt: (product && product.createdAt) || Date.now()
+    });
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-stone-900/50 flex items-end sm:items-center justify-center">
+      <div className="bg-stone-50 w-full sm:max-w-lg sm:rounded-xl rounded-t-2xl max-h-[92vh] overflow-y-auto shadow-2xl">
+        <div className="sticky top-0 bg-emerald-900 text-stone-50 px-4 py-3 flex items-center justify-between sm:rounded-t-xl">
+          <h2 className="font-serif font-semibold text-base">{isEditing ? "Editar produto" : "Novo produto"}</h2>
+          <button onClick={onClose} className="text-xl leading-none px-2">×</button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-4 flex flex-col gap-3">
+          <div className="bg-amber-50 border border-amber-300 rounded-lg p-3 text-xs text-stone-700">
+            📌 Cole no campo "Link de afiliada" o link que a <strong>própria Shopee já gerou</strong> pra
+            você (Painel da Shopee → Gerador de Links). Esse link já contém seu ID de afiliada embutido.
+          </div>
+
+          <Field label="Nome do produto">
+            <input required value={form.name} onChange={(e) => update("name", e.target.value)} className="input" />
+          </Field>
+
+          <Field label="Categoria">
+            <select required value={form.categoryId} onChange={(e) => update("categoryId", e.target.value)} className="input">
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>{c.emoji} {c.name}</option>
+              ))}
+            </select>
+          </Field>
+
+          <Field label="Loja">
+            <input value={form.store} onChange={(e) => update("store", e.target.value)} className="input" />
+          </Field>
+
+          <Field label="Link de afiliada (gerado na Shopee)">
+            <input required value={form.affiliateLink} onChange={(e) => update("affiliateLink", e.target.value)} placeholder="https://shope.ee/xxxxxxx" className="input" />
+          </Field>
+
+          <Field label="URL da imagem do produto">
+            <input value={form.imageUrl} onChange={(e) => update("imageUrl", e.target.value)} placeholder="https://..." className="input" />
+          </Field>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Preço (R$)">
+              <input required type="number" step="0.01" value={form.price} onChange={(e) => update("price", e.target.value)} className="input" />
+            </Field>
+            <Field label="Preço original — opcional">
+              <input type="number" step="0.01" value={form.originalPrice} onChange={(e) => update("originalPrice", e.target.value)} className="input" />
+            </Field>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Avaliação (0-5) — opcional">
+              <input type="number" step="0.1" min="0" max="5" value={form.rating} onChange={(e) => update("rating", e.target.value)} className="input" />
+            </Field>
+            <Field label="Comissão (%) — opcional">
+              <input type="number" step="0.1" value={form.commissionPercent} onChange={(e) => update("commissionPercent", e.target.value)} className="input" />
+            </Field>
+  </div>
